@@ -131,3 +131,5 @@ dmypy.json
 areas
 data
 inputs.csv
+local data
+test_local.ipynb

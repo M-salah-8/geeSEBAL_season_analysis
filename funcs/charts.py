@@ -2,34 +2,31 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import os
 
-def daily_charts(daily_df, images_df, data, export_folder, chart_name):
+def daily_chart(season_dr, data, chart_name):
+    sheets = os.listdir(os.path.join(season_dr, "sheets"))
+    if "daily_data_0.csv" in sheets:
+        sheets.remove("daily_data_0.csv")
+    for sheet in sheets:
+        id = sheet.split(".")[0].split("_")[-1]
+        df = pd.read_csv(os.path.join(season_dr, "sheets", sheet))
+        df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
 
-    plt.figure(figsize=(9,5.8))
-    plt.figure(facecolor='white')
+        plt.figure(figsize=(9,5.8))
+        plt.figure(facecolor='white')
 
-    choosen_dates = pd.to_datetime(images_df['date'])
+        plt.plot(df['date'].tolist(), df[data].tolist(), color= 'blue', linestyle = '-',linewidth= 2, markersize=8)
 
-    plt.plot(daily_df['date'], daily_df[data], color= 'blue', linestyle = '-',linewidth= 2, markersize=8)
-    plt.plot(choosen_dates, daily_df[daily_df['date'].isin(choosen_dates)][data],'ro')
+        plt.xticks(df['date'].dt.to_period('M').unique().to_timestamp(),
+                    [month.strftime('%B %Y') for month in df['date'].dt.to_period('M').unique()],
+                    rotation=90)
+        plt.grid(True)
+        plt.xlabel('date', fontsize= 14)
+        plt.ylabel(chart_name, fontsize= 14)
+        plt.title(chart_name, fontweight= 'bold', fontsize= 14)
 
-    plt.xticks(daily_df['date'].dt.to_period('M').unique().to_timestamp(),
-                [month.strftime('%B %Y') for month in daily_df['date'].dt.to_period('M').unique()],
-                rotation=90)
+        os.makedirs(os.path.join(season_dr, "charts", data), exist_ok=True)
 
-    for date in choosen_dates:
-        plt.axvline(x=date, color='black', linestyle=':', alpha=0.5)  # Vertical line at chosen dates
-        plt.text(date, plt.gca().get_ylim()[0], date.day, ha='center', va='top', rotation=90)  # Day number as text
-
-    plt.grid(True)
-
-    plt.xlabel('date', fontsize= 14)
-    plt.ylabel(chart_name, fontsize= 14)
-    plt.title(chart_name, fontweight= 'bold', fontsize= 14)
-
-    if not os.path.isdir(export_folder):
-        os.makedirs(export_folder)
-
-    plt.savefig(os.path.join(export_folder, f'{chart_name}.png'), bbox_inches = 'tight', pad_inches = 0.1)
+        plt.savefig(os.path.join(season_dr, "charts", data, f'{id}.png'), bbox_inches = 'tight', pad_inches = 0.1)
 
 def daily_sum_charts(daily_df, data,export_folder, chart_name):
     plt.figure(figsize=(9,5.8))

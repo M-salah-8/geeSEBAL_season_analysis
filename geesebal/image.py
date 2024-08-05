@@ -47,7 +47,7 @@ class Image():
         self.cloud_cover=self.image.get('CLOUD_COVER')                  ###
         self.LANDSAT_ID=self.image.get('system:id').getInfo()           ###
         self.landsat_version=self.image.get('SPACECRAFT_ID').getInfo()  ###
-        self.azimuth_angle=self.image.get('SUN_AZIMUTH')                ###
+        self.sun_elevation=self.image.get('SUN_ELEVATION')                ###
         self.time_start=self.image.get('system:time_start')
         self._date=ee.Date(self.time_start)
         self._year=ee.Number(self._date.get('year'))
@@ -94,15 +94,10 @@ class Image():
          #ALBEDO TASUMI ET AL. (2008)
              self.image=self.image.map(f_albedoL5L7)
 
-        else:
+        elif self.landsat_version == 'LANDSAT_8':
             self.image = self.image.select(
                 ['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'SR_B7', 'ST_B10', 'QA_PIXEL']\
                 ,["UB","B","GR","R","NIR","SWIR_1","SWIR_2","BRT","pixel_qa"])                      ###
-            self.image_toa=ee.Image('LANDSAT/LC08/C02/T1_TOA/'+self._index.getInfo())               ###
-
-         #GET CALIBRATED RADIANCE
-            self.col_rad = ee.Algorithms.Landsat.calibratedRadiance(self.image_toa)
-            self.col_rad = self.image.addBands(self.col_rad.select([9],["T_RAD"]))                  ### ???
 
          #CLOUD REMOVAL
             self.image=ee.ImageCollection(self.image)
@@ -111,15 +106,26 @@ class Image():
          #ALBEDO TASUMI ET AL. (2008) METHOD WITH KE ET AL. (2016) COEFFICIENTS
             self.image=self.image.map(f_albedoL8)
 
-        #GEOMETRY
-        self.geometryReducer=self.image.geometry().bounds().getInfo()                               ### del
-        self.geometry_download=self.geometryReducer['coordinates']
-        self.camada_clip=self.image.select('BRT').first()                                           ### check
+        elif self.landsat_version == 'LANDSAT_9':
+            self.image = self.image.select(
+                ['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'SR_B7', 'ST_B10', 'QA_PIXEL']\
+                ,["UB","B","GR","R","NIR","SWIR_1","SWIR_2","BRT","pixel_qa"])                      ###
 
-        self.sun_elevation=ee.Number(90).subtract(self.azimuth_angle)
+         #CLOUD REMOVAL
+            self.image=ee.ImageCollection(self.image)
+            # self.image=ee.ImageCollection(self.image).map(f_cloudMaskL8_SR)                       ### fix
+
+         #ALBEDO TASUMI ET AL. (2008) METHOD WITH KE ET AL. (2016) COEFFICIENTS
+            self.image=self.image.map(f_albedoL8)
+
+        else:
+            print('version error')
+
+        #GEOMETRY
+        self.geometryReducer=self.image.geometry().bounds().getInfo()
 
         #METEOROLOGY PARAMETERS
-        col_meteorology= get_meteorology(self.image,self.time_start)                                ### filter geometry
+        col_meteorology= get_meteorology(self.image,self.time_start)
 
         #AIR TEMPERATURE [C]
         self.T_air = col_meteorology.select('AirT_G')
@@ -132,9 +138,6 @@ class Image():
 
         #NET RADIATION 24H [W M-2]
         self.Rn24hobs = col_meteorology.select('Rn24h_G')
-
-        #Solar Radiation 24H [MJ m-2]           ### added
-        self.solar_radiation = col_meteorology.select('solar_radiation')
 
         #SRTM DATA ELEVATION
         SRTM_ELEVATION ='USGS/SRTMGL1_003'
@@ -177,7 +180,6 @@ class Image():
         #SENSIBLE HEAT FLUX (H) [W M-2]
         self.image=fexp_sensible_heat_flux(self.image, self.ux, self.UR,self.Rn24hobs,self.n_Ts_cold,
                                            self.d_hot_pixel, self.date_string,self.geometryReducer)
-
 
         #DAILY EVAPOTRANSPIRATION (ET_24H) [MM DAY-1]
         self.image=fexp_et(self.image,self.Rn24hobs)

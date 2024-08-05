@@ -4,75 +4,81 @@ import glob
 import numpy as np
 import rasterio
 import rasterio.mask
-import scipy.stats
-   
-def fill_missing(df, daily_df, data_name):
-  daily_df.at[0,data_name] = 0
-  daily_df[data_name] = daily_df[data_name].interpolate(method='polynomial', order=3)
-  date_2, date_1= [pd.to_datetime(i) for i in df['date'].tolist()[-2:]]
-  last_dates_df = daily_df[(daily_df['date'] >= date_2) & (daily_df['date'] <= date_1)]
-  dates_len = len(last_dates_df)
-  x = range(1, dates_len+1)
-  slope, intercept, _, _, _ = scipy.stats.linregress(x, last_dates_df[data_name])
-  x = dates_len
-  for index in daily_df[(daily_df['date'] > date_1)].index:
-    x += 1
-    daily_df.loc[index, data_name] = slope*x + intercept
-    
-def write_dfs(season_dr, daily_ET_df, field_shp):
-    ETa_df = pd.DataFrame({'date':[], 'min':[], 'median':[], 'mean':[], 'max':[], 'stdDev':[]})
-    kc_df = pd.DataFrame({'date':[], 'min':[], 'median':[], 'mean':[], 'max':[], 'stdDev':[]})
-    ndvi_df = pd.DataFrame({'date':[], 'min':[], 'median':[], 'mean':[], 'max':[], 'stdDev':[]})
-    daily_ndvi_df = daily_ET_df[['date']].copy()
-    et_folder = os.path.join(season_dr, 'ET')
-    ndvi_folder = os.path.join(season_dr, 'ndvi')
-    ETa_tifs_paths = sorted(glob.glob(os.path.join(et_folder, 'tifs', 'ETa') + '/*.tif'))
-    kc_tifs_paths = sorted(glob.glob(os.path.join(et_folder, 'tifs', 'kc') + '/*.tif'))
-    ndvi_tifs_paths = sorted(glob.glob(os.path.join(ndvi_folder, 'tifs', 'ndvi') + '/*.tif'))
-    
-    for ETa_tif_path, kc_tif_path, ndvi_tif_path in zip(ETa_tifs_paths, kc_tifs_paths, ndvi_tifs_paths):
-        date = os.path.basename(ETa_tif_path).split('.')[0].split('_')[1]
-        with rasterio.open(ETa_tif_path) as src:
-            ETa_array = rasterio.mask.mask(src, field_shp.to_crs(src.crs).geometry, crop = True, nodata= np.nan)[0][0]
-        with rasterio.open(kc_tif_path) as src:
-            kc_array = rasterio.mask.mask(src, field_shp.to_crs(src.crs).geometry, crop = True, nodata= np.nan)[0][0]
-        with rasterio.open(ndvi_tif_path) as src:
-            ndvi_array = rasterio.mask.mask(src, field_shp.to_crs(src.crs).geometry, crop = True, nodata= np.nan)[0][0]
+import datetime
 
-        ETa_row = {'date': date, 'min': np.nanmin(ETa_array), 'median': np.nanmedian(ETa_array), 'mean': np.nanmean(ETa_array), 'max': np.nanmax(ETa_array), 'stdDev': np.nanstd(ETa_array)}
-        kc_row = {'date': date, 'min': np.nanmin(kc_array), 'median': np.nanmedian(kc_array), 'mean': np.nanmean(kc_array), 'max': np.nanmax(kc_array), 'stdDev': np.nanstd(kc_array)}
-        ndvi_row = {'date': date, 'min': np.nanmin(ndvi_array), 'median': np.nanmedian(ndvi_array), 'mean': np.nanmean(ndvi_array), 'max': np.nanmax(ndvi_array), 'stdDev': np.nanstd(ndvi_array)}
-        ETa_df.loc[len(ETa_df)] = ETa_row
-        kc_df.loc[len(kc_df)] = kc_row
-        ndvi_df.loc[len(ndvi_df)] = ndvi_row
-        # add to daily dfs
-        daily_ET_df.loc[daily_ET_df['date'] == date, 'ETa'] = ETa_row['mean']
-        daily_ET_df.loc[daily_ET_df['date'] == date, 'kc'] = kc_row['mean']
-        daily_ndvi_df.loc[daily_ndvi_df['date'] == date, 'ndvi'] = ndvi_row['mean']
+def fill_missing(daily_df, data_name):
+  daily_df.at[0,data_name] = daily_df.at[daily_df[data_name].first_valid_index(), data_name]
+  # daily_df.at[0,data_name] = 0
+  daily_df[data_name] = daily_df[data_name].interpolate('linear')
+  # daily_df[data_name] = daily_df[data_name].interpolate(method='polynomial', order=3)
+  # daily_df.fillna(method='ffill')
 
+def dekad_days(date):
+  day = int(date.split("-")[-1])
+  if day == 1 or day == 11:
+    s_d = datetime.datetime.strptime(date, '%Y-%m-%d')
+    e_d = s_d + datetime.timedelta(days=10)
+    days = pd.date_range(s_d,e_d - datetime.timedelta(days=1),freq='d').astype(str)
+    return days
+  elif day == 21:
+    s_d = datetime.datetime.strptime(date, '%Y-%m-%d')
+    e_d = (s_d.replace(day=1) + datetime.timedelta(days=32)).replace(day=1)
+    days = pd.date_range(s_d,e_d - datetime.timedelta(days=1),freq='d').astype(str)
+    return days
+
+def write_dfs(season_dr, field_gdf):
+  dekads = sorted(os.listdir(os.path.join(season_dr, "dekads")))
+  os.makedirs(os.path.join(season_dr, 'sheets'), exist_ok= True)
+  for index, row in field_gdf.iterrows():
+    daily_df = pd.DataFrame({'date':[], 'ETp':[]})
+    wapor_pet = sorted(glob.glob(os.path.join(season_dr, 'WaPOR_data', "L1-RET-E_resampled")+"/*.tif"))
+    for pet in wapor_pet:
+      date = os.path.basename(pet).split('.')[0].split('_')[-1]
+      with rasterio.open(pet) as src:
+        pet_array = rasterio.mask.mask(src, [row.geometry], crop = True, nodata= np.nan)[0][0]
+      etp_row = {'date': date, 'ETp': np.nanmean(pet_array)}
+      daily_df.loc[len(daily_df)] = etp_row
+    # kc
+    for dekad in dekads:
+      tifs_dr = os.path.join(season_dr, "dekads", dekad, "kc", "tifs")
+      if os.path.exists(tifs_dr):
+        tifs = glob.glob(tifs_dr + "/*.tif")
+        for kc in tifs:
+          date = os.path.basename(kc).split(".")[0].split("_")[1]
+          kc_src = rasterio.open(kc)
+          kc_array = rasterio.mask.mask(kc_src, [row.geometry], crop = True, nodata= np.nan)[0][0]
+          daily_df.loc[daily_df['date'] == date, 'kc'] = np.nanmean(kc_array)
+      else:
+        tifs_dr = os.path.join(season_dr, "dekads", dekad, "ETa")
+        et_tif = glob.glob(tifs_dr + "/*.tif")[0]
+        date = os.path.basename(et_tif).split(".")[0]
+        et_src = rasterio.open(et_tif)
+        et_array = rasterio.mask.mask(et_src, [row.geometry], crop = True, nodata= np.nan)[0][0]
+        et_mean = np.nanmean(et_array)
+        days = dekad_days(date)
+        # et_day_mean = et_mean / len(days)
+        pet_dekad = 0
+        for day in days:
+          pet = daily_df.loc[daily_df['date'] == day, 'ETp'].values[0]  # check
+          pet_dekad = pet_dekad + pet
+        kc_mean = et_mean / pet_dekad
+        for day in days:
+          daily_df.loc[daily_df['date'] == day, 'kc'] = kc_mean
+      # biomass
+      tifs_dr = os.path.join(season_dr, "dekads", dekad, "biomass")
+      if os.path.exists(tifs_dr):
+        biomass_tif = glob.glob(tifs_dr + "/*.tif")[0]
+        date = os.path.basename(biomass_tif).split(".")[0]
+        biomass_src = rasterio.open(biomass_tif)
+        biomass_array = rasterio.mask.mask(biomass_src, [row.geometry], crop = True, nodata= np.nan)[0][0]
+        biomass_mean = np.nanmean(biomass_array)
+        days = dekad_days(date)
+        biomass_day_mean = biomass_mean / len(days)
+        for day in days:
+          daily_df.loc[daily_df['date'] == day, 'biomass'] = biomass_day_mean
+      else:
+        continue
     # complite the daily dfs
-    # daily_ET_df.at[0,'kc'] = daily_ET_df.at[daily_ET_df['kc'].first_valid_index(), 'kc']
-    daily_ET_df.at[0,'kc'] = 0
-    fill_missing(kc_df, daily_ET_df, 'kc')
-    daily_ET_df['ETa'] = daily_ET_df['ETp'] * daily_ET_df['kc']
-    fill_missing(ndvi_df, daily_ndvi_df, 'ndvi')
-    # monthly
-    monthly_ET_df = daily_ET_df.copy()
-    monthly_ET_df['Month-Year'] = monthly_ET_df['date'].dt.to_period('M')
-    monthly_ET_df = monthly_ET_df.groupby('Month-Year')['ETa'].agg(['sum', 'mean']).reset_index()
-    monthly_ndvi_df = daily_ndvi_df.copy()
-    monthly_ndvi_df['Month-Year'] = monthly_ndvi_df['date'].dt.to_period('M')
-    monthly_ndvi_df = monthly_ndvi_df.groupby('Month-Year')['ndvi'].agg(['sum', 'mean']).reset_index()
-    # export dataframes
-    et_sheets_dr = os.path.join(et_folder,'datasheets')
-    os.makedirs(et_sheets_dr, exist_ok= True)
-    ETa_df.to_csv(os.path.join(et_sheets_dr,'ETa.csv'), index=False)
-    kc_df.to_csv(os.path.join(et_sheets_dr,'kc.csv'), index=False)
-    daily_ET_df.to_csv(os.path.join(et_sheets_dr,'daily_ET.csv'), index=False)
-    monthly_ET_df.to_csv(os.path.join(et_sheets_dr,'monthly_ET.csv'), index=False)
-    ndvi_sheet_dr = os.path.join(ndvi_folder, 'datasheets')
-    os.makedirs(ndvi_sheet_dr, exist_ok= True)
-    ndvi_df.to_csv(os.path.join(ndvi_sheet_dr, 'ndvi.csv'), index=False)
-    daily_ndvi_df.to_csv(os.path.join(ndvi_sheet_dr, 'daily_ndvi.csv'), index=False)
-    monthly_ndvi_df.to_csv(os.path.join(ndvi_sheet_dr,'monthly_ndvi.csv'), index=False)
-    return daily_ET_df, monthly_ET_df, ETa_df, kc_df, daily_ndvi_df, monthly_ndvi_df, ndvi_df
+    fill_missing(daily_df, 'kc')
+    daily_df['ETa'] = daily_df['ETp'] * daily_df['kc']
+    daily_df.to_csv(os.path.join(season_dr, 'sheets', f'daily_data_{str(row.id)}.csv'), index=False)

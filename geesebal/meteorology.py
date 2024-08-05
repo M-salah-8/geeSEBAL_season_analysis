@@ -19,11 +19,6 @@
 #Call EE
 import ee
 
-#GLOBAL LAND DATA ASSIMILATION SYSTEM (GLDAS)
-#1984 TO 1999-12-31 - GLDAS 2.0
-#2000 TO PRESENT - GLDAS 2.1
-#3h, 6h, 9h, 12h, 15h, 18h, 21h, 00h
-
 def get_meteorology(image,time_start):
 
     meteo_inst_source = 'ECMWF/ERA5_LAND/HOURLY'
@@ -32,8 +27,8 @@ def get_meteorology(image,time_start):
 
     #LINEAR INTERPOLATION
     TIME_START_NUM=ee.Number(time_start)
-    PREVIOUS_TIME=TIME_START_NUM.subtract(3*60*60*1000)                                     ### filter geometry???
-    NEXT_TIME=TIME_START_NUM.add(3*60*60*1000)
+    PREVIOUS_TIME=TIME_START_NUM.subtract(1*60*60*1000)       # change 3 hours to 1 hour
+    NEXT_TIME=TIME_START_NUM.add(1*60*60*1000)                # change 3 hours to 1 hour
 
 
     PREVIOUS_IMAGE=(DATASET.filter(ee.Filter.date(PREVIOUS_TIME,TIME_START_NUM))
@@ -55,7 +50,7 @@ def get_meteorology(image,time_start):
 
     #INVERSE RELATIVE DISTANCE EARTH-SUN
     #ALLEN ET AL.(1998)
-    d1 = ee.Number(2).multiply(ee.Number(Pi)).divide(ee.Number(365))
+    d1 =  ee.Number(2).multiply(ee.Number(Pi)).divide(ee.Number(365))
     d2 = d1.multiply(doy)
     d3 = d2.cos()
     dr = ee.Number(1).add(ee.Number(0.033).multiply(d3))
@@ -146,11 +141,11 @@ def get_meteorology(image,time_start):
     # ACTUAL VAPOR PRESSURE [KPA]
     ea = tdp.expression(
         '0.6108 * (exp((17.27 * T_air) / (T_air + 237.3)))',{
-        'T_air': tdp.subtract(273.15)}).rename('ea')
+        'T_air': tdp.subtract(273.15)})
 
     # SATURATED VAPOR PRESSURE [KPA]
     esat = tair_c.expression(
-        '0.6108 * (exp((17.27 * T_air) / (T_air + 237.3)))', {'T_air': tair_c.subtract(273.15)}).rename('esat')
+        '0.6108 * (exp((17.27 * T_air) / (T_air + 237.3)))', {'T_air': tair_c.subtract(273.15)})
 
     # RELATIVE HUMIDITY (%)
     rh = ea.divide(esat).multiply(100).rename('RH_G')
@@ -161,10 +156,10 @@ def get_meteorology(image,time_start):
     rh = rh.resample('bilinear')
     swdown24h = i_Rs_24h.resample('bilinear')
     rn24h = i_Rn_24h.resample('bilinear')
-    solar_radiation = PREVIOUS_IMAGE.select('surface_solar_radiation_downwards').divide(1000000).rename('solar_radiation')
+
 
     #CONCATENATES IMAGES
-    col_meteorology = ee.Image.cat(rn24h, tair_c, rh, wind_med, swdown24h, solar_radiation)
+    col_meteorology = ee.Image.cat(rn24h, tair_c, rh, wind_med, swdown24h)
 
     return col_meteorology
 
