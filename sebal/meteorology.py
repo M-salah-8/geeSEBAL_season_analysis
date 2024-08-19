@@ -19,12 +19,12 @@
 #Call EE
 # import ee
 import datetime
-from osgeo import gdal
 import rasterio
 import numpy as np
 import os
 import math
 import pyproj
+import pygrib
 from rasterio.warp import reproject, Resampling
 
 def save_data(image, output_dr, meta, array, name):
@@ -33,35 +33,23 @@ def save_data(image, output_dr, meta, array, name):
     image[name.upper()] = os.path.join(output_dr, f'{name.lower()}.tif')
 
 def get_meteorology(image, time_start, data_dr, cal_bands_dr, meta):
+    grib_dr = os.path.join(data_dr, "era5-hourly.grib")
+    image_mask = np.load(image['MASK'])
     col_meteorology = {}
     bands = ['ALFA']
     arrays = {}
     for band in bands:
         src = rasterio.open(image[band])
         array = src.read(1).astype(np.float32)
-        array[array == src.nodata] = np.nan
+        array[image_mask] = np.nan
         arrays[band] = array.copy()
-
+    gribs_src = rasterio.open(grib_dr)
     #LINEAR INTERPOLATION
     TIME_START_NUM = time_start
     PREVIOUS_TIME = time_start - datetime.timedelta(hours=1)
     NEXT_TIME = time_start + datetime.timedelta(hours=1)
-
-    ds = gdal.Open(os.path.join(data_dr, "era5-hourly.grib"))
-    grib_src = rasterio.open(os.path.join(data_dr, "era5-hourly.grib"))
-    previous_bands = []
-    next_bands = []
-    for band in range(1, ds.RasterCount):
-        seconds = ds.GetRasterBand(band).GetMetadata()['GRIB_VALID_TIME']
-        time = datetime.datetime.fromtimestamp(int(seconds))
-        if PREVIOUS_TIME <= time <= TIME_START_NUM:
-            previous_bands.append(band)
-        elif TIME_START_NUM <= time <= NEXT_TIME:
-            next_bands.append(band)
-    seconds = ds.GetRasterBand(previous_bands[0]).GetMetadata()['GRIB_VALID_TIME']
-    IMAGE_PREVIOUS_TIME = datetime.datetime.fromtimestamp(int(seconds))
-    seconds = ds.GetRasterBand(next_bands[0]).GetMetadata()['GRIB_VALID_TIME']
-    IMAGE_NEXT_TIME = datetime.datetime.fromtimestamp(int(seconds))
+    IMAGE_PREVIOUS_TIME = TIME_START_NUM.replace(minute=0, second=0, microsecond=0)
+    IMAGE_NEXT_TIME = NEXT_TIME.replace(minute=0, second=0, microsecond=0)
     DELTA_TIME = (TIME_START_NUM - IMAGE_PREVIOUS_TIME) / (IMAGE_NEXT_TIME - IMAGE_PREVIOUS_TIME)
 
     #DAY OF THE YEAR
@@ -90,16 +78,14 @@ def get_meteorology(image, time_start, data_dr, cal_bands_dr, meta):
     cols, rows = np.meshgrid(np.arange(width), np.arange(height))
     xs, ys = transform * (cols, rows)
     proj = pyproj.Transformer.from_crs(src.crs, "EPSG:4326")  # Convert to WGS84
-    lons, lats = proj.transform(xs, ys)
-    lons[np.isnan(arrays["ALFA"])] = np.nan
-    lats[np.isnan(arrays["ALFA"])] = np.nan
+    lats, lons = proj.transform(xs, ys)
     save_data(image, cal_bands_dr, meta, lons, 'LONGITUDE')
     save_data(image, cal_bands_dr, meta, lats, 'LATITUDE')
     
     #SUNSET  HOUR ANGLE [RADIANS]
     #ASCE REPORT (2005)
     i_lat_rad = (lats * Pi) / 180
-    i_sun_hour = np.arccos(- np.tan(i_lat_rad)* np.tan(solar_dec))    
+    i_sun_hour = np.arccos(- np.tan(i_lat_rad)* np.tan(solar_dec))
     del(lons, lats)
 
     #SOLAR CONSTANT
@@ -116,18 +102,23 @@ def get_meteorology(image, time_start, data_dr, cal_bands_dr, meta):
     sr_time = time_start - datetime.timedelta(hours=11)
     er_time = time_start + datetime.timedelta(hours=13)
     i_RS_sec = 0
-    for band in range(1, ds.RasterCount):
-        seconds = ds.GetRasterBand(band).GetMetadata()['GRIB_VALID_TIME']
-        time = datetime.datetime.fromtimestamp(int(seconds))
+    gribs = pygrib.open(grib_dr).select(name='Surface short-wave (solar) radiation downwards')
+    for grib in gribs:
+        date = grib['validityDate']
+        year = date // 10000
+        month = (date // 100) % 100
+        day = date % 100
+        hours = int(grib['validityTime'] // 100)
+        # Create a datetime object
+        time = datetime.datetime(year, month, day, hours)
         if sr_time <= time <= er_time:
-            if ds.GetRasterBand(band).GetMetadata()['GRIB_COMMENT'] == 'Surface solar radiation downwards [W*s/m^2]':
-                i_RS_sec = i_RS_sec + ds.GetRasterBand(band).ReadAsArray()
-                # filtered_bands.append(band)
+            i_RS_sec = i_RS_sec + grib.values
+            
     i_Rs_24h = i_RS_sec / 86400
-    i_Rs_24h, _ = reproject(i_Rs_24h, destination= np.zeros(src.shape), src_transform=grib_src.transform,
-        src_crs=grib_src.crs, src_nodata=None, dst_transform=src.transform,
-        dst_crs=src.crs, dst_nodata=None, dst_resolution=src.res, resampling=Resampling.bilinear)
-    i_Rs_24h[np.isnan(arrays["ALFA"])] = np.nan
+    i_Rs_24h, _ = reproject(i_Rs_24h, destination= np.zeros(src.shape, dtype=np.float32), src_transform=gribs_src.transform,
+            src_crs=gribs_src.crs, src_nodata=None, dst_transform=src.transform,
+            dst_crs=src.crs, dst_nodata=None, dst_resolution=src.res, resampling=Resampling.bilinear)
+    i_Rs_24h[image_mask] = np.nan
     save_data(col_meteorology, cal_bands_dr, meta, i_Rs_24h, 'SW_DOWN')
 
     # TASUMI
@@ -138,60 +129,72 @@ def get_meteorology(image, time_start, data_dr, cal_bands_dr, meta):
     i_Rn_24h = ((1 - i_albedo_ls) * i_Rs_24h) - (110 * (i_Rs_24h / i_Ra_24h))
     save_data(col_meteorology, cal_bands_dr, meta, i_Rn_24h, 'RN24h_G')
     del(i_albedo_ls)
-    
-    next_image = {}
-    for band in next_bands:
-        comment = ds.GetRasterBand(band).GetMetadata()['GRIB_COMMENT']
-        next_image[comment] = band
 
-    previous_image = {}
-    for band in previous_bands:
-        comment = ds.GetRasterBand(band).GetMetadata()['GRIB_COMMENT']
-        previous_image[comment] = band
-    
     # AIR TEMPERATURE [K]
-    tair_pre = ds.GetRasterBand(previous_image['2 metre temperature [C]']).ReadAsArray()
-    tair_next = ds.GetRasterBand(next_image['2 metre temperature [C]']).ReadAsArray()
+    tair_pre = pygrib.open(grib_dr).select(
+        name='2 metre temperature',
+        validityDate= int(IMAGE_PREVIOUS_TIME.strftime("%Y%m%d")),
+        validityTime= IMAGE_PREVIOUS_TIME.hour*100)[0].values
+    tair_next = pygrib.open(grib_dr).select(
+        name='2 metre temperature',
+        validityDate= int(IMAGE_NEXT_TIME.strftime("%Y%m%d")),
+        validityTime= IMAGE_NEXT_TIME.hour*100)[0].values
     tair_c = ((tair_next - tair_pre) * DELTA_TIME) + tair_pre
-    
-    tair_c, _ = reproject(tair_c, destination= np.zeros(src.shape), src_transform=grib_src.transform,
-        src_crs=grib_src.crs, src_nodata=None, dst_transform=src.transform,
-        dst_crs=src.crs, dst_nodata=None, dst_resolution=src.res, resampling=Resampling.bilinear)
-    tair_c[np.isnan(arrays["ALFA"])] = np.nan
+    tair_c, _ = reproject(tair_c, destination= np.zeros(src.shape), src_transform=gribs_src.transform,
+            src_crs=gribs_src.crs, src_nodata=None, dst_transform=src.transform,
+            dst_crs=src.crs, dst_nodata=None, dst_resolution=src.res, resampling=Resampling.bilinear)
+    tair_c[image_mask] = np.nan
     del(tair_pre, tair_next)
 
     # WIND SPEED [M S-1]
-    wind_u_pre = ds.GetRasterBand(previous_image['10 metre u wind component [m/s]']).ReadAsArray()
-    wind_u_next = ds.GetRasterBand(next_image['10 metre u wind component [m/s]']).ReadAsArray()
+    wind_u_pre = pygrib.open(grib_dr).select(
+        name='10 metre U wind component',
+        validityDate= int(IMAGE_PREVIOUS_TIME.strftime("%Y%m%d")),
+        validityTime= IMAGE_PREVIOUS_TIME.hour*100)[0].values
+    wind_u_next = pygrib.open(grib_dr).select(
+        name='10 metre U wind component',
+        validityDate= int(IMAGE_NEXT_TIME.strftime("%Y%m%d")),
+        validityTime= IMAGE_NEXT_TIME.hour*100)[0].values
     wind_u = ((wind_u_next - wind_u_pre) * DELTA_TIME) + wind_u_pre
     del(wind_u_pre, wind_u_next)
 
-    wind_v_pre = ds.GetRasterBand(previous_image['10 metre v wind component [m/s]']).ReadAsArray()
-    wind_v_next = ds.GetRasterBand(next_image['10 metre v wind component [m/s]']).ReadAsArray()
+    wind_v_pre = pygrib.open(grib_dr).select(
+        name='10 metre V wind component',
+        validityDate= int(IMAGE_PREVIOUS_TIME.strftime("%Y%m%d")),
+        validityTime= IMAGE_PREVIOUS_TIME.hour*100)[0].values
+    wind_v_next = pygrib.open(grib_dr).select(
+        name='10 metre V wind component',
+        validityDate= int(IMAGE_NEXT_TIME.strftime("%Y%m%d")),
+        validityTime= IMAGE_NEXT_TIME.hour*100)[0].values
     wind_v = ((wind_v_next - wind_v_pre) * DELTA_TIME) + wind_v_pre
     del(wind_v_pre, wind_v_next)
 
     # TODO: CGM check if the select calls are needed
     wind_med = np.sqrt(wind_u ** 2 + wind_v ** 2)
     wind_med = wind_med * (4.87) / np.log(67.8 * 10 - 5.42)
-
-    wind_med, _ = reproject(wind_med, destination= np.zeros(src.shape), src_transform=grib_src.transform,
-        src_crs=grib_src.crs, src_nodata=None, dst_transform=src.transform,
+    wind_med, _ = reproject(wind_med, destination= np.zeros(src.shape), src_transform=gribs_src.transform,
+        src_crs=gribs_src.crs, src_nodata=None, dst_transform=src.transform,
         dst_crs=src.crs, dst_nodata=None, dst_resolution=src.res, resampling=Resampling.bilinear)
-    wind_med[np.isnan(arrays["ALFA"])] = np.nan
+    wind_med[image_mask] = np.nan
     save_data(col_meteorology, cal_bands_dr, meta, wind_med, 'UX_G')
     del(wind_u, wind_v, wind_med)
 
     # PRESSURE [PA] CONVERTED TO KPA
-    tdp_pre = ds.GetRasterBand(previous_image['2 metre dewpoint temperature [C]']).ReadAsArray()
-    tdp_next = ds.GetRasterBand(next_image['2 metre dewpoint temperature [C]']).ReadAsArray()
+    tdp_pre = pygrib.open(grib_dr).select(
+        name='2 metre dewpoint temperature',
+        validityDate= int(IMAGE_PREVIOUS_TIME.strftime("%Y%m%d")),
+        validityTime= IMAGE_PREVIOUS_TIME.hour*100)[0].values
+    tdp_next = pygrib.open(grib_dr).select(
+        name='2 metre dewpoint temperature',
+        validityDate= int(IMAGE_NEXT_TIME.strftime("%Y%m%d")),
+        validityTime= IMAGE_NEXT_TIME.hour*100)[0].values
     tdp = ((tdp_next - tdp_pre) * DELTA_TIME) + tdp_pre
     
-    tdp, _ = reproject(tdp, destination= np.zeros(src.shape), src_transform=grib_src.transform,
-        src_crs=grib_src.crs, src_nodata=None, dst_transform=src.transform,
+    tdp, _ = reproject(tdp, destination= np.zeros(src.shape), src_transform=gribs_src.transform,
+        src_crs=gribs_src.crs, src_nodata=None, dst_transform=src.transform,
         dst_crs=src.crs, dst_nodata=None, dst_resolution=src.res, resampling=Resampling.bilinear)
-    tdp[np.isnan(arrays["ALFA"])] = np.nan
-    del(tdp_next, tdp_pre)
+    tdp[image_mask] = np.nan
+    del(tdp_pre, tdp_next)
 
     # ACTUAL VAPOR PRESSURE [KPA]
     ea = 0.6108 * (np.exp((17.27 * (tdp - 273.15)) / ((tdp - 273.15) + 237.3)))

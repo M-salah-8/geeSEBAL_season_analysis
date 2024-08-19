@@ -46,6 +46,15 @@ def fexp_cold_pixel(image, refpoly, p_top_NDVI, p_coldest_Ts):
   #UPDATE MASK WITH NDVI VALUES
   i_top_NDVI=image.updateMask(image.select('NDVI_neg').lte(n_perc_top_NDVI))
 
+  lower_upper=i_top_NDVI.select('NDVI_neg').reduceRegion(
+      reducer=ee.Reducer.percentile([40,60]),
+      geometry= refpoly,
+      scale= 30,
+      maxPixels=9e14)
+  lower_percentile = ee.Number(lower_upper.get('NDVI_neg_p40'))
+  upper_percentile = ee.Number(lower_upper.get('NDVI_neg_p60'))
+  i_top_NDVI= image.updateMask(i_top_NDVI.select('NDVI_neg').gte(lower_percentile).And(i_top_NDVI.select('NDVI_neg').lte(upper_percentile)))
+  
   #SELECT THE COLDEST TS FROM PREVIOUS NDVI GROUP
   d_perc_low_LST = i_top_NDVI.select('LST_NW').reduceRegion(
     reducer= ee.Reducer.percentile([p_coldest_Ts]),
@@ -56,6 +65,15 @@ def fexp_cold_pixel(image, refpoly, p_top_NDVI, p_coldest_Ts):
   #GET VALUE
   n_perc_low_LST = ee.Number(d_perc_low_LST.get('LST_NW'))
   i_cold_lst = i_top_NDVI.updateMask(i_top_NDVI.select('LST_NW').lte(n_perc_low_LST))
+  
+  lower_upper=i_cold_lst.select('LST_NW').reduceRegion(
+    reducer=ee.Reducer.percentile([40,60]),
+    geometry= refpoly,
+    scale= 30,
+    maxPixels=9e14)
+  lower_percentile = ee.Number(lower_upper.get('LST_NW_p40'))
+  upper_percentile = ee.Number(lower_upper.get('LST_NW_p60'))
+  i_cold_lst= image.updateMask(i_cold_lst.select('LST_NW').gte(lower_percentile).And(i_cold_lst.select('LST_NW').lte(upper_percentile)))
 
   #FILTERS
   c_lst_cold20 =  i_cold_lst.updateMask(image.select('LST_NW').gte(200))
@@ -103,10 +121,18 @@ def fexp_hot_pixel(image, refpoly, p_lowest_NDVI, p_hottest_Ts):
        )
   #GET VALUE
   n_perc_low_NDVI= ee.Number(d_perc_down_ndvi.get('pos_NDVI'))
-  t_n_perc_low_NDVI = n_perc_low_NDVI.getInfo()
 
   #UPDATE MASK WITH NDVI VALUES
   i_low_NDVI = image.updateMask(image.select('pos_NDVI').lte(n_perc_low_NDVI))
+
+  lower_upper=i_low_NDVI.select('pos_NDVI').reduceRegion(
+    reducer=ee.Reducer.percentile([40,60]),
+    geometry= refpoly,
+    scale= 30,
+    maxPixels=9e14)
+  lower_percentile = ee.Number(lower_upper.get('pos_NDVI_p40'))
+  upper_percentile = ee.Number(lower_upper.get('pos_NDVI_p60'))
+  i_low_NDVI= image.updateMask(i_low_NDVI.select('pos_NDVI').gte(lower_percentile).And(i_low_NDVI.select('pos_NDVI').lte(upper_percentile)))
 
   #SELECT THE HOTTEST TS FROM PREVIOUS NDVI GROUP
   d_perc_top_lst = i_low_NDVI.select('LST_neg').reduceRegion(
@@ -118,8 +144,16 @@ def fexp_hot_pixel(image, refpoly, p_lowest_NDVI, p_hottest_Ts):
 
   #GET VALUE
   n_perc_top_lst = ee.Number(d_perc_top_lst.get('LST_neg'))
-
   c_lst_hotpix = i_low_NDVI.updateMask(i_low_NDVI.select('LST_neg').lte(n_perc_top_lst))
+
+  lower_upper=c_lst_hotpix.select('LST_neg').reduceRegion(
+    reducer=ee.Reducer.percentile([40,60]),
+    geometry= refpoly,
+    scale= 30,
+    maxPixels=9e14)
+  lower_percentile = ee.Number(lower_upper.get('LST_neg_p40'))
+  upper_percentile = ee.Number(lower_upper.get('LST_neg_p60'))
+  c_lst_hotpix= image.updateMask(c_lst_hotpix.select('LST_neg').gte(lower_percentile).And(c_lst_hotpix.select('LST_neg').lte(upper_percentile)))
 
   c_lst_hotpix_int=c_lst_hotpix.select('LST_NW').int().rename('int')
 
@@ -153,6 +187,5 @@ def fexp_hot_pixel(image, refpoly, p_lowest_NDVI, p_hottest_Ts):
         'G': ee.Number(n_G_hot),
         'ndvi': ee.Number(n_ndvi_hot),
         'sum': ee.Number(n_count_final_hot_pix)})
-
   #RETURN DICTIONARY
   return d_hot_pixel

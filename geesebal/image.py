@@ -66,63 +66,39 @@ class Image():
         self.p_hottest_Ts=ee.Number(Ts_hot)
 
         #LANDSAT IMAGE
-        if self.landsat_version == 'LANDSAT_5':
-             self.image=self.image.select([0,1,2,3,4,5,6,9], ["B","GR","R","NIR","SWIR_1","BRT","SWIR_2", "pixel_qa"])
-             self.image_toa=ee.Image('LANDSAT/LT05/C01/T1/'+ self._index.getInfo())
-
-         #GET CALIBRATED RADIANCE
-             self.col_rad = ee.Algorithms.Landsat.calibratedRadiance(self.image_toa)
-             self.col_rad = self.image.addBands(self.col_rad.select([5],["T_RAD"]))
-
-         #CLOUD REMOTION
-             self.image=ee.ImageCollection(self.image).map(f_cloudMaskL457_SR)
-
-         #ALBEDO TASUMI ET AL. (2008)
-             self.image=self.image.map(f_albedoL5L7)
-
-        elif self.landsat_version == 'LANDSAT_7':
-             self.image=self.image.select([0,1,2,3,4,5,6,9], ["B","GR","R","NIR","SWIR_1","BRT","SWIR_2", "pixel_qa"])
-             self.image_toa=ee.Image('LANDSAT/LE07/C01/T1/'+ self._index.getInfo())
-
-         #GET CALIBRATED RADIANCE
-             self.col_rad = ee.Algorithms.Landsat.calibratedRadiance(self.image_toa)
-             self.col_rad = self.image.addBands(self.col_rad.select([5],["T_RAD"]))
-
-         #CLOUD REMOVAL
-             self.image=ee.ImageCollection(self.image).map(f_cloudMaskL457_SR)  
-
-         #ALBEDO TASUMI ET AL. (2008)
-             self.image=self.image.map(f_albedoL5L7)
-
-        elif self.landsat_version == 'LANDSAT_8':
+        if self.landsat_version == 'LANDSAT_8':
+            opticalBands = self.image.select('SR_B.').multiply(0.0000275).add(-0.2)
+            thermalBands = self.image.select('ST_B.*').multiply(0.00341802).add(149.0)
+            self.image = self.image.addBands(opticalBands, overwrite= True).addBands(thermalBands, overwrite= True)
             self.image = self.image.select(
                 ['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'SR_B7', 'ST_B10', 'QA_PIXEL']\
-                ,["UB","B","GR","R","NIR","SWIR_1","SWIR_2","BRT","pixel_qa"])                      ###
+                ,["UB","B","GR","R","NIR","SWIR_1","SWIR_2","BRT","pixel_qa"])
 
          #CLOUD REMOVAL
-            self.image=ee.ImageCollection(self.image)
-            # self.image=ee.ImageCollection(self.image).map(f_cloudMaskL8_SR)                       ### fix
+            self.image= f_cloudMaskL8_SR(self.image)
 
          #ALBEDO TASUMI ET AL. (2008) METHOD WITH KE ET AL. (2016) COEFFICIENTS
-            self.image=self.image.map(f_albedoL8)
+            self.image=f_albedoL8(self.image)
 
         elif self.landsat_version == 'LANDSAT_9':
+            opticalBands = self.image.select('SR_B.').multiply(0.0000275).add(-0.2)
+            thermalBands = self.image.select('ST_B.*').multiply(0.00341802).add(149.0)
+            self.image = self.image.addBands(opticalBands, overwrite= True).addBands(thermalBands, overwrite= True)
             self.image = self.image.select(
                 ['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'SR_B7', 'ST_B10', 'QA_PIXEL']\
-                ,["UB","B","GR","R","NIR","SWIR_1","SWIR_2","BRT","pixel_qa"])                      ###
+                ,["UB","B","GR","R","NIR","SWIR_1","SWIR_2","BRT","pixel_qa"])
 
          #CLOUD REMOVAL
-            self.image=ee.ImageCollection(self.image)
-            # self.image=ee.ImageCollection(self.image).map(f_cloudMaskL8_SR)                       ### fix
+            self.image= f_cloudMaskL8_SR(self.image)
 
          #ALBEDO TASUMI ET AL. (2008) METHOD WITH KE ET AL. (2016) COEFFICIENTS
-            self.image=self.image.map(f_albedoL8)
+            self.image=f_albedoL8(self.image)
 
         else:
             print('version error')
 
         #GEOMETRY
-        self.geometryReducer=self.image.geometry().bounds().getInfo()
+        self.geometryReducer=self.image.geometry().bounds()
 
         #METEOROLOGY PARAMETERS
         col_meteorology= get_meteorology(self.image,self.time_start)
@@ -144,9 +120,6 @@ class Image():
         self.srtm = ee.Image(SRTM_ELEVATION).clip(self.geometryReducer)
         self.z_alt = self.srtm.select('elevation')
 
-        #GET IMAGE
-        self.image=self.image.first()
-
         #SPECTRAL IMAGES (NDVI, EVI, SAVI, LAI, T_LST, e_0, e_NB, long, lat)
         self.image=fexp_spec_ind(self.image)
 
@@ -157,7 +130,7 @@ class Image():
         self.d_cold_pixel=fexp_cold_pixel(self.image, self.geometryReducer, self.p_top_NDVI, self.p_coldest_Ts)
 
         #COLD PIXEL NUMBER
-        self.n_Ts_cold = ee.Number(self.d_cold_pixel.get('temp').getInfo())
+        self.n_Ts_cold = ee.Number(self.d_cold_pixel.get('temp'))
 
         #INSTANTANEOUS OUTGOING LONG-WAVE RADIATION [W M-2]
         self.image=fexp_radlong_up(self.image)
@@ -176,7 +149,6 @@ class Image():
 
         #HOT PIXEL
         self.d_hot_pixel=fexp_hot_pixel(self.image, self.geometryReducer,self.p_lowest_NDVI, self.p_hottest_Ts)
-
         #SENSIBLE HEAT FLUX (H) [W M-2]
         self.image=fexp_sensible_heat_flux(self.image, self.ux, self.UR,self.Rn24hobs,self.n_Ts_cold,
                                            self.d_hot_pixel, self.date_string,self.geometryReducer)

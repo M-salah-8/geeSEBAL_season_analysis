@@ -21,6 +21,7 @@ import datetime
 import rasterio
 import numpy as np
 import shutil
+import pickle
 
 #FOLDERS
 from .masks import (f_cloudMaskL8_SR,f_albedoL_8_9)
@@ -45,7 +46,7 @@ class Image_local():
         self.image_dr = image_dr
         self.data_dr = r"local data"
         self.ls_data_dr = os.path.split(image_dr)[0]
-        self.cal_bands_dr = os.path.join(self.ls_data_dr, "calculated_bands")
+        self.cal_bands_dr = os.path.join(self.image_dr, "calculated_bands")
         os.makedirs(self.cal_bands_dr, exist_ok= True)
         self.results_dr = os.path.join(self.data_dr, "results")
         meta_names = ['LANDSAT_PRODUCT_ID', 'SPACECRAFT_ID', 'SUN_ELEVATION', 'CLOUD_COVER', 'SCENE_CENTER_TIME', 'DATE_ACQUIRED']
@@ -94,9 +95,8 @@ class Image_local():
             self.ls_meta.update(dtype= np.float32, nodata= np.nan)
             self.res = rasterio.open(self.image['UB']).res
             #CLOUD REMOVAL
-            # self.image=ee.ImageCollection(self.image)
-            # self.image=ee.ImageCollection(self.image).map(f_cloudMaskL8_SR)                       ### fix
-            
+            self.image=f_cloudMaskL8_SR(self.image, self.cal_bands_dr)
+
             # ALBEDO TASUMI ET AL. (2008) METHOD WITH KE ET AL. (2016) COEFFICIENTS
             self.image=f_albedoL_8_9(self.image, self.ls_meta, self.cal_bands_dr)
 
@@ -113,15 +113,19 @@ class Image_local():
             self.ls_meta.update(dtype= np.float32, nodata= np.nan)
             self.res = rasterio.open(self.image['UB']).res
             #CLOUD REMOVAL
-            # self.image=ee.ImageCollection(self.image)
-            # self.image=ee.ImageCollection(self.image).map(f_cloudMaskL8_SR)                       ### fix
+            self.image=f_cloudMaskL8_SR(self.image, self.cal_bands_dr)
 
-            
             # ALBEDO TASUMI ET AL. (2008) METHOD WITH KE ET AL. (2016) COEFFICIENTS
             self.image=f_albedoL_8_9(self.image, self.ls_meta, self.cal_bands_dr)
 
         else:
             print('version error')
+
+        # with open('self_image.pkl', 'rb') as f:
+        #     self.image = pickle.load(f)
+
+        # with open('self_col_meteorology.pkl', 'rb') as f:
+        #     col_meteorology = pickle.load(f)
 
         # METEOROLOGY PARAMETERS
         col_meteorology= get_meteorology(self.image, self.time_start, self.ls_data_dr, self.cal_bands_dr, self.ls_meta)
@@ -154,7 +158,7 @@ class Image_local():
         #COLD PIXEL NUMBER
         self.n_Ts_cold = self.d_cold_pixel['temp']
 
-        #INSTANTANEOUS OUTGOING LONG-WAVE RADIATION [W M-2]
+        # INSTANTANEOUS OUTGOING LONG-WAVE RADIATION [W M-2]
         self.image=fexp_radlong_up(self.image, self.cal_bands_dr, self.ls_meta)
 
         #INSTANTANEOUS INCOMING SHORT-WAVE RADIATION [W M-2]
@@ -177,4 +181,11 @@ class Image_local():
 
         #DAILY EVAPOTRANSPIRATION (ET_24H) [MM DAY-1]
         self.image=fexp_et(self.image, self.Rn24hobs, self.cal_bands_dr, self.ls_meta, self.results_dr, self.date_string)
-        shutil.rmtree(self.cal_bands_dr)
+        
+        with open('self_col_meteorology.pkl', 'wb') as handle:
+            pickle.dump(col_meteorology, handle)
+
+        with open('self_image.pkl', 'wb') as handle:
+            pickle.dump(self.image, handle)
+
+        # shutil.rmtree(self.cal_bands_dr)

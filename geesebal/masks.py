@@ -32,12 +32,12 @@ def f_cloudMaskL457_SR(image):
 
 #FUNCTION FO MASK CLOUD IN LANDSAT 8 FOR SURFACE REFELCTANCE    ### reduce none values
 def f_cloudMaskL8_SR(image):                                    ### check clear\water numbers
-    quality = image.select('pixel_qa')
-    c01 = quality.eq(322) #CLEAR, LOW CONFIDENCE CLOUD
-    c02 = quality.eq(324) #WATER, LOW CONFIDENCE CLOUD
-    c03 = quality.eq(1346)#CLEAR TERRAIN
-    mask = c01.Or(c02).Or(c03)
-    return image.updateMask(mask)
+  qa = image.select('pixel_qa')
+  dilated_cloud_bit_mask = (1 << 1)
+  cloud_shadow_bit_mask = (1 << 3)
+  cloud_bit_mask = (1<< 4)
+  cloud_mask = qa.bitwiseAnd(cloud_shadow_bit_mask).eq(0).And(qa.bitwiseAnd(cloud_bit_mask).eq(0)).And(qa.bitwiseAnd(dilated_cloud_bit_mask).eq(0))
+  return image.updateMask(cloud_mask)
 
 #ALBEDO
 #TASUMI ET AL(2008) FOR LANDSAT 5 AND 7
@@ -62,13 +62,13 @@ def f_albedoL5L7(image):
 def f_albedoL8(image):                                            ### changed scaling factors
     alfa = image.expression(
       '(0.130*B1) + (0.115*B2) + (0.143*B3) + (0.180*B4) + (0.281*B5) + (0.108*B6) + (0.042*B7)',{  #// (Ke, Im  et al 2016)
-        'B1' : image.select(['UB']).multiply(0.0000275).add(-0.2),
-        'B2' : image.select(['B']).multiply(0.0000275).add(-0.2),
-        'B3' : image.select(['GR']).multiply(0.0000275).add(-0.2),
-        'B4' : image.select(['R']).multiply(0.0000275).add(-0.2),
-        'B5' : image.select(['NIR']).multiply(0.0000275).add(-0.2),
-        'B6' : image.select(['SWIR_1']).multiply(0.0000275).add(-0.2),
-        'B7' : image.select(['SWIR_2']).multiply(0.0000275).add(-0.2)
+        'B1' : image.select(['UB']),
+        'B2' : image.select(['B']),
+        'B3' : image.select(['GR']),
+        'B4' : image.select(['R']),
+        'B5' : image.select(['NIR']),
+        'B6' : image.select(['SWIR_1']),
+        'B7' : image.select(['SWIR_2'])
       }).rename('ALFA')
 
     #ADD BANDS

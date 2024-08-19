@@ -25,24 +25,24 @@ def fexp_spec_ind(image):
     #NORMALIZED DIFFERENCE VEGETATION INDEX (NDVI)
     ndvi =  image.normalizedDifference(['NIR', 'R']).rename('NDVI')
 
-    #ENHANCED VEGETATION INDEX (EVI)                                    ### changed scalling
+    #ENHANCED VEGETATION INDEX (EVI)
     evi = image.expression('2.5 * ((N - R) / (N + (6 * R) - (7.5 * B) + 1))', {
-        'N': image.select('NIR').multiply(0.0000275).add(-0.2),
-        'R': image.select('R').multiply(0.0000275).add(-0.2),
-        'B': image.select('B').multiply(0.0000275).add(-0.2),}).rename('EVI')
+        'N': image.select('NIR'),
+        'R': image.select('R'),
+        'B': image.select('B'),}).rename('EVI')
 
-    #SOIL ADHUSTED VEGETATION INDEX (SAVI)                               ### changed scalling
+    #SOIL ADHUSTED VEGETATION INDEX (SAVI)
     savi = image.expression(
       '((1 + 0.5)*(B5 - B4)) / (0.5 + (B5 + B4))', {
-        'B4': image.select('R').multiply(0.0000275).add(-0.2),
-        'B5': image.select('NIR').multiply(0.0000275).add(-0.2),
+        'B4': image.select('R'),
+        'B5': image.select('NIR'),
     }).rename('SAVI')
 
     #NORMALIZED DIFFERENCE WATER INDEX (NDWI)
     ndwi =  image.normalizedDifference(['GR', 'NIR']).rename('NDWI')
-    savi1 = savi.where(savi.gt(0.689), 0.689)                           ### check
+    savi1 = savi.where(savi.gt(0.689), 0.689)
 
-    #LEAF AREA INDEX (LAI)                                              ### check
+    #LEAF AREA INDEX (LAI)
     lai = image.expression(
       '-(log(( 0.69-SAVI)/0.59 ) / 0.91)', {'SAVI': savi1}).rename('LAI')
 
@@ -66,14 +66,14 @@ def fexp_spec_ind(image):
     comp_onda = ee.Number(1.115e-05)
     lst = image.expression(
       'Tb / ( 1+ ( ( comp_onda * Tb / fator) * log_eNB))',{
-        'Tb': image.select('BRT').multiply(0.00341802).add(149),
+        'Tb': image.select('BRT'),
         'comp_onda': comp_onda,
         'log_eNB': log_eNB,
         'fator': ee.Number(1.438e-02),
       }).rename('T_LST')
 
     #RESCALED BRIGHTNESS TEMPERATURE                                    ### changed scalling
-    brt_r = image.select('BRT').multiply(0.00341802).add(149).rename('BRT_R')
+    brt_r = image.select('BRT').rename('BRT_R')
     proj = image.select('B').projection()
     latlon = ee.Image.pixelLonLat().reproject(proj)
     coords = latlon.select(['longitude', 'latitude'])
@@ -88,6 +88,7 @@ def fexp_spec_ind(image):
 
     #ADD BANDS
     image = image.addBands([ndvi,evi,savi,lst,lai,e_0,e_NB,coords,ndvi_neg,pos_ndvi,int_, sd_ndvi, ndwi, brt_r])
+    
     return image
 
 #LAND SURFACE TEMPERATURE CORRECTION
@@ -240,7 +241,7 @@ def LST_DEM_correction(image, z_alt, T_air, UR,SUN_ELEVATION,hour,minuts):
     solar_zenith = ee.Number(90).subtract(SUN_ELEVATION)
     degree2radian = 0.01745
     solar_zenith_radians = solar_zenith.multiply(degree2radian)
-    cos_theta = solar_zenith_radians.cos().abs()                            ### added abs + check
+    cos_theta = solar_zenith_radians.cos()
 
     #BROAD-BAND ATMOSPHERIC TRANSMISSIVITY (tao_sw)
     #ASCE-EWRI (2005)
@@ -280,7 +281,6 @@ def LST_DEM_correction(image, z_alt, T_air, UR,SUN_ELEVATION,hour,minuts):
     #GET IMAGE CENTROID
     image_center =image.geometry().centroid()
     longitude_center=ee.Number(image_center.coordinates().get(0))
-
     #DELTA GTM
     DELTA_GTM =longitude_center.divide(15).int()
 
@@ -329,22 +329,22 @@ def fexp_radlong_up(image):
     #TASUMI ET AL. (2003)
     #ALLEN ET AL. (2007)
 
-   emi = image.expression('0.95 + (0.01 * LAI)', {
-           'LAI' : image.select('LAI')})
-   #LAI
-   lai = image.select('LAI')
-   emi = emi.where(lai.gt(3), 0.98)
-   stefBol = ee.Image(5.67e-8)
+    emi = image.expression('0.95 + (0.01 * LAI)', {
+            'LAI' : image.select('LAI')})
+    #LAI
+    lai = image.select('LAI')
+    emi = emi.where(lai.gt(3), 0.98)
+    stefBol = ee.Image(5.67e-8)
 
-   Rl_up = image.expression(
-      'emi * stefBol * (LST ** 4)', {
-      'emi' : emi,
-      'stefBol': stefBol,
-      'LST': image.select('T_LST')}).rename('Rl_up')
+    Rl_up = image.expression(
+        'emi * stefBol * (LST ** 4)', {
+        'emi' : emi,
+        'stefBol': stefBol,
+        'LST': image.select('T_LST')}).rename('Rl_up')
 
-   #ADD BANDS
-   image = image.addBands([Rl_up])
-   return image
+    #ADD BANDS
+    image = image.addBands([Rl_up])
+    return image
 
 #INSTANTANEOUS INCOMING SHORT-WAVE RADIATION (Rs_down) [W M-2]
 def fexp_radshort_down(image, z_alt, T_air, UR,SUN_ELEVATION):
@@ -532,8 +532,8 @@ def fexp_sensible_heat_flux(image, ux, UR, Rn24hobs, n_Ts_cold, d_hot_pixel, dat
 
     #Z1 AND Z2 ARE HEIGHTS [M] ABOVE THE ZERO PLANE DISPLACEMENT
     #OF THE VEGETATION
-    z1= ee.Number(0.1)
-    z2= ee.Number(2)
+    z1= ee.Number(0.1);
+    z2= ee.Number(2);
     i_rah = i_ufric.expression(
       '(log(z2/z1))/(i_ufric*0.41)', {
               'z2' : z2,
@@ -638,7 +638,7 @@ def fexp_sensible_heat_flux(image, ux, UR, Rn24hobs, n_Ts_cold, d_hot_pixel, dat
     #STABILITY CORRECTIONS FOR MOMENTUM AND HEAT TRANSPORT
     #PAULSON (1970)
     #WEBB (1970)
-        img = ee.Image(0).clip(refpoly)
+        img = ee.Image(0).clip(refpoly);
 
     #STABILITY CORRECTIONS FOR STABLE CONDITIONS
         i_psim_200 = img.expression(
@@ -675,7 +675,7 @@ def fexp_sensible_heat_flux(image, ux, UR, Rn24hobs, n_Ts_cold, d_hot_pixel, dat
         i_psih_2 = i_psih_2.where(i_L_int.lt(0), i_psihu_2)
         i_psih_01 = i_psih_01.where(i_L_int.lt(0), i_psihu_01)
         i_psim_200 = i_psim_200.where(i_L_int.eq(0), 0)
-        i_psih_2 = i_psih_2.where(i_L_int.eq(0), 0)
+        i_psih_2 = i_psih_2.where(i_L_int.eq(0), 0);
         i_psih_01 = i_psih_01.where(i_L_int.eq(0), 0)
 
         if n==1:
@@ -714,7 +714,7 @@ def fexp_sensible_heat_flux(image, ux, UR, Rn24hobs, n_Ts_cold, d_hot_pixel, dat
             n_rah_hot_old = n_rah_hot
 
         #INSERT EACH ITERATION VALUE INTO A LIST
-        list_dif = list_dif.add(n_dif)
+        list_dif = list_dif.add(n_dif);
         list_coef_a = list_coef_a.add(n_coef_a)
         list_coef_b = list_coef_b.add(n_coef_b)
         list_dT_hot = list_dT_hot.add(n_dT_hot)

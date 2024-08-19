@@ -98,7 +98,7 @@ def get_meteorology(image,time_start):
                 .divide(86400).rename('SW_Down')
 
     # TASUMI
-    i_albedo_ls =image.select('ALFA').first()
+    i_albedo_ls =image.select('ALFA')
 
     #NET RADIATION 24H [W M-2]
     #BRUIN (1982)
@@ -156,7 +156,6 @@ def get_meteorology(image,time_start):
     rh = rh.resample('bilinear')
     swdown24h = i_Rs_24h.resample('bilinear')
     rn24h = i_Rn_24h.resample('bilinear')
-
 
     #CONCATENATES IMAGES
     col_meteorology = ee.Image.cat(rn24h, tair_c, rh, wind_med, swdown24h)

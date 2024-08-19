@@ -32,31 +32,31 @@ def save_data(image, output_dr, meta, array, name):
 
 #SPECTRAL INDICES MODULE
 def fexp_spec_ind(image, meta, cal_bands_dr, results_dr, date_string):
+    image_mask = np.load(image['MASK'])
     sr_bands = ['B', 'R', 'NIR', 'GR']
     st_bands = ['BRT']
     arrays = {}
     for band in sr_bands:
         src = rasterio.open(image[band])
         array = src.read(1).astype(np.float32)
-        array[array == src.nodata] = np.nan
+        array[image_mask] = np.nan
         arrays[band] = array.copy() * 0.0000275 - 0.2
     for band in st_bands:
         src = rasterio.open(image[band])
         array = src.read(1).astype(np.float32)
-        array[array == src.nodata] = np.nan
+        array[image_mask] = np.nan
         arrays[band] = array.copy() * 0.00341802 + 149
 
     rgb = np.zeros([3,*src.shape])
-    rgb[0] = arrays["R"].copy() * 256
-    rgb[1] = arrays["GR"].copy() * 256
-    rgb[2] = arrays["B"].copy() * 256
+    rgb[0] = arrays["R"].copy() * 255
+    rgb[1] = arrays["GR"].copy() * 255
+    rgb[2] = arrays["B"].copy() * 255
     rgb_meta = meta.copy()
     rgb_meta.update(count=3, dtype='uint8', nodata=0)
     os.makedirs(os.path.join(results_dr, 'rgb'), exist_ok=True)
     with rasterio.open(os.path.join(results_dr, 'rgb', f'rgb_{date_string}.tif'), 'w', **rgb_meta) as dst:
         dst.write(rgb)
     del(rgb, rgb_meta)
-
 
     #NORMALIZED DIFFERENCE VEGETATION INDEX (NDVI)
     ndvi = (arrays["NIR"] - arrays["R"]) / (arrays["NIR"] + arrays["R"])
@@ -119,10 +119,6 @@ def fexp_spec_ind(image, meta, cal_bands_dr, results_dr, date_string):
     brt_r = arrays['BRT']
     save_data(image, cal_bands_dr, meta, brt_r, 'BRT_R')
     del(brt_r)
-
-    # proj = image.select('B').projection()
-    # latlon = ee.Image.pixelLonLat().reproject(proj)
-    # coords = latlon.select(['longitude', 'latitude'])
 
     #FOR FUTHER USE
     pos_ndvi = ndvi.copy()
@@ -258,25 +254,26 @@ def fexp_lst_export(img_main,img_main_RAD,landsat_version,refpoly):
 #PYSEBAL (BASTIAANSSEN) Reference?
 
 def LST_DEM_correction(image, z_alt, T_air, UR,SUN_ELEVATION, time_start, hour, minuts, meta, cal_bands_dr):
+    image_mask = np.load(image['MASK'])
     bands = ['T_LST', 'LATITUDE', 'LONGITUDE', 'NDWI']
     arrays = {}
     src = rasterio.open(z_alt)
     array = src.read(1).astype(np.float32)
-    array[array == src.nodata] = np.nan
+    array[image_mask] = np.nan
     arrays['Z_ALT'] = array.copy()
     src = rasterio.open(T_air)
     array = src.read(1).astype(np.float32)
-    array[array == src.nodata] = np.nan
+    array[image_mask] = np.nan
     arrays['T_AIR'] = array.copy()
     src = rasterio.open(UR)
     array = src.read(1).astype(np.float32)
-    array[array == src.nodata] = np.nan
+    array[image_mask] = np.nan
     arrays['UR'] = array.copy()
 
     for band in bands:
         src = rasterio.open(image[band])
         array = src.read(1).astype(np.float32)
-        array[array == src.nodata] = np.nan
+        array[image_mask] = np.nan
         arrays[band] = array.copy()
 
     #SOLAR CONSTANT [W M-2]
@@ -334,6 +331,7 @@ def LST_DEM_correction(image, z_alt, T_air, UR,SUN_ELEVATION, time_start, hour, 
     with rasterio.open(os.path.join(cal_bands_dr, 'aspect.tif')) as dataset:
         aspect=dataset.read(1)
 
+
     B = (360 / 365) * (doy - 81)
     delta = (np.arcsin(np.sin(23.45 * degree2radian)) * np.sin(B * degree2radian))
     s = slope * degree2radian
@@ -384,6 +382,7 @@ def LST_DEM_correction(image, z_alt, T_air, UR,SUN_ELEVATION, time_start, hour, 
 
 #INSTANTANEOUS OUTGOING LONG-WAVE RADIATION (Rl_up) [W M-2]
 def fexp_radlong_up(image, cal_bands_dr, meta):
+    image_mask = np.load(image['MASK'])
     #BROAD-BAND SURFACE THERMAL EMISSIVITY
     #TASUMI ET AL. (2003)
     #ALLEN ET AL. (2007)
@@ -392,7 +391,7 @@ def fexp_radlong_up(image, cal_bands_dr, meta):
     for band in bands:
         src = rasterio.open(image[band])
         array = src.read(1).astype(np.float32)
-        array[array == src.nodata] = np.nan
+        array[image_mask] = np.nan
         arrays[band] = array.copy()
 
     emi = 0.95 + (0.01 * arrays['LAI'])
@@ -408,18 +407,19 @@ def fexp_radlong_up(image, cal_bands_dr, meta):
 
 #INSTANTANEOUS INCOMING SHORT-WAVE RADIATION (Rs_down) [W M-2]
 def fexp_radshort_down(image, z_alt, T_air, UR,SUN_ELEVATION, time_start, meta, cal_bands_dr):
+    image_mask = np.load(image['MASK'])
     arrays = {}
     src = rasterio.open(z_alt)
     array = src.read(1).astype(np.float32)
-    array[array == src.nodata] = np.nan
+    array[image_mask] = np.nan
     arrays['Z_ALT'] = array.copy()
     src = rasterio.open(T_air)
     array = src.read(1).astype(np.float32)
-    array[array == src.nodata] = np.nan
+    array[image_mask] = np.nan
     arrays['T_AIR'] = array.copy()
     src = rasterio.open(UR)
     array = src.read(1).astype(np.float32)
-    array[array == src.nodata] = np.nan
+    array[image_mask] = np.nan
     arrays['UR'] = array.copy()
 
     #SOLAR CONSTANT
@@ -472,10 +472,11 @@ def fexp_radshort_down(image, z_alt, T_air, UR,SUN_ELEVATION, time_start, meta, 
     #INSTANTANEOUS INCOMING LONGWAVE RADIATION (Rl_down) [W M-2]
     #ALLEN ET AL (2007)
 def fexp_radlong_down(image, n_Ts_cold, cal_bands_dr, meta):
+    image_mask = np.load(image['MASK'])
     arrays = {}
     src = rasterio.open(image['TAO_SW'])
     array = src.read(1).astype(np.float32)
-    array[array == src.nodata] = np.nan
+    array[image_mask] = np.nan
     arrays['TAO_SW'] = array.copy()
 
     log_taosw = np.log(arrays['TAO_SW'])
@@ -486,12 +487,13 @@ def fexp_radlong_down(image, n_Ts_cold, cal_bands_dr, meta):
 
     #INSTANTANEOUS NET RADIATON BALANCE (Rn) [W M-2]
 def fexp_radbalance(image, cal_bands_dr, meta):
+    image_mask = np.load(image['MASK'])
     bands = ['ALFA', 'RS_DOWN', 'RL_DOWN', 'RL_UP', 'E_0']
     arrays = {}
     for band in bands:
         src = rasterio.open(image[band])
         array = src.read(1).astype(np.float32)
-        array[array == src.nodata] = np.nan
+        array[image_mask] = np.nan
         arrays[band] = array.copy()
 
     Rn = ((1-arrays['ALFA']) * arrays['RS_DOWN']) + arrays['RL_DOWN'] - arrays['RL_UP'] - ((1 - arrays['E_0']) * arrays['RL_DOWN'])
@@ -502,12 +504,13 @@ def fexp_radbalance(image, cal_bands_dr, meta):
     #SOIL HEAT FLUX (G) [W M-2]
     #BASTIAANSSEN (2000)
 def fexp_soil_heat(image, cal_bands_dr, meta):
+    image_mask = np.load(image['MASK'])
     bands = ['RN', 'NDVI', 'ALFA', 'T_LST_DEM']
     arrays = {}
     for band in bands:
         src = rasterio.open(image[band])
         array = src.read(1).astype(np.float32)
-        array[array == src.nodata] = np.nan
+        array[image_mask] = np.nan
         arrays[band] = array.copy()
 
     G = arrays['RN'] * (arrays['T_LST_DEM'] - 273.15) * ( 0.0038 + (0.0074 * arrays['ALFA'])) *  (1 - 0.98 * (arrays['NDVI'] ** 4))
@@ -517,18 +520,19 @@ def fexp_soil_heat(image, cal_bands_dr, meta):
 
     #SENSIBLE HEAT FLUX (H) [W M-2]
 def fexp_sensible_heat_flux(image, ux, UR, Rn24hobs, n_Ts_cold, d_hot_pixel, cal_bands_dr, meta):
+    image_mask = np.load(image['MASK'])
     bands = ['SAVI', 'T_LST_DEM']
     arrays = {}
     for band in bands:
         src = rasterio.open(image[band])
         array = src.read(1).astype(np.float32)
-        array[array == src.nodata] = np.nan
+        array[image_mask] = np.nan
         arrays[band] = array.copy()
 
-        src = rasterio.open(ux)
-        array = src.read(1).astype(np.float32)
-        array[array == src.nodata] = np.nan
-        arrays["UX"] = array.copy()
+    src = rasterio.open(ux)
+    array = src.read(1).astype(np.float32)
+    array[image_mask] = np.nan
+    arrays["UX"] = array.copy()
 
     #VEGETATION HEIGHTS  [M]
     n_veg_hight = 3
@@ -578,7 +582,7 @@ def fexp_sensible_heat_flux(image, ux, UR, Rn24hobs, n_Ts_cold, d_hot_pixel, cal
     z1= 0.1
     z2= 2
     i_rah = (np.log(z2/z1))/(i_ufric*0.41)
-    save_data(image, cal_bands_dr, meta, i_ufric, 'RAH')
+    save_data(image, cal_bands_dr, meta, i_rah, 'RAH_FIRST')
 
     # i_rah_first = i_rah
 
@@ -593,7 +597,7 @@ def fexp_sensible_heat_flux(image, ux, UR, Rn24hobs, n_Ts_cold, d_hot_pixel, cal
     #ITERATIVE VARIABLES
     n= 1
     n_dif= 1
-    # n_dif_min = 0.1
+    n_dif_min = 0.1
     list_dif = []
     list_dT_hot = []
     list_rah_hot = []

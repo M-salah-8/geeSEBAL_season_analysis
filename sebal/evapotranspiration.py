@@ -28,23 +28,24 @@ def save_data(image, output_dr, meta, array, name):
     image[name.upper()] = os.path.join(output_dr, f'{name.lower()}.tif')
 
 def fexp_et(image, Rn24hobs, cal_bands_dr, meta, results_dr, date_string):
+    image_mask = np.load(image['MASK'])
     bands = ['RN', 'G', 'T_LST_DEM', 'H']
     arrays = {}
     for band in bands:
         src = rasterio.open(image[band])
         array = src.read(1).astype(np.float32)
-        array[array == src.nodata] = np.nan
+        array[image_mask] = np.nan
         arrays[band] = array.copy()
     src = rasterio.open(Rn24hobs)
     array = src.read(1).astype(np.float32)
-    array[array == src.nodata] = np.nan
+    array[image_mask] = np.nan
     arrays['RN24H_G'] = array.copy()
 
     #NET DAILY RADIATION (Rn24h) [W M-2]
     #BRUIN (1982)
     src = rasterio.open(Rn24hobs)
     array = src.read(1).astype(np.float32)
-    array[array == src.nodata] = np.nan
+    array[image_mask] = np.nan
     Rn24hobs = array.copy() * 1
 
     #GET ENERGY FLUXES VARIABLES AND LST

@@ -128,8 +128,11 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-areas
-data
-inputs.csv
-local data
-test_local.ipynb
+areas/
+data/
+inputs.csv/
+local data/
+tests/
+.cdsapirc
+self_col_meteorology.pkl
+self_image.pkl
