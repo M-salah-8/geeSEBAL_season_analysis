@@ -37,3 +37,6 @@ local data/strm_30m.tif
 e.g.:\
 local data/landsat images/1/LC08_L2SP_173048_20240711_20240719_02_T1/\
 local data/landsat images/1/era5-hourly.grib	(rename era5 grib to "era5-hourly.grib")
+
+### contact:
+Mohammed Salah (mohammedalmak98@gmail.com)  
