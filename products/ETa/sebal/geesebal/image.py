@@ -30,7 +30,7 @@ from .endmembers import fexp_cold_pixel, fexp_hot_pixel
 from .evapotranspiration import fexp_et
 
 #IMAGE FUNCTION
-class Image():
+class Image_gee():
 
     #ENDMEMBERS DEFAULT
     #ALLEN ET AL. (2013)

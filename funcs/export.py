@@ -6,7 +6,6 @@ import rasterio
 import pandas as pd
 import datetime
 import rasterio.mask
-import geopandas as gpd
 from wapordl import wapor_map
 
 def date_dekad(date):
@@ -31,8 +30,7 @@ def dekad_days(date):
     days = pd.date_range(s_d,e_d - datetime.timedelta(days=1),freq='d').astype(str)
     return days
 
-def export_gee_tifs_localy(image, data, data_name, season_dr, date, aoi):
-    date_d = date_dekad(date)
+def export_gee_tifs_localy(image, data, data_name, output_folder, date, aoi):
     data_url = {
         'NDVI': image.select('NDVI').getDownloadUrl({
             'bands': 'NDVI',
@@ -53,11 +51,10 @@ def export_gee_tifs_localy(image, data, data_name, season_dr, date, aoi):
             'format': 'GEO_TIFF'
             })
     }
-    download_dr = os.path.join(season_dr, "dekads", date_d, data_name, 'tifs')
-    os.makedirs(download_dr, exist_ok=True)
     response = requests.get(data_url[data])
-    with open(os.path.join(download_dr, f'{data_name}_{date}.tif'), 'wb') as fd:
-        fd.write(response.content)
+    os.makedirs(os.path.join(output_folder, data_name), exist_ok= True)
+    with open(os.path.join(output_folder, data_name, f'{data_name}_{date}.tif'), 'wb') as fd:
+      fd.write(response.content)
 
 def export_image_to_drive(img, description, folder, aoi):
     # Export cloud-optimized GeoTIFF images

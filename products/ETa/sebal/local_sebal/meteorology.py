@@ -44,7 +44,7 @@ def get_meteorology(image, time_start, data_dr, cal_bands_dr, meta):
         array[image_mask] = np.nan
         arrays[band] = array.copy()
     gribs_src = rasterio.open(grib_dr)
-    #LINEAR INTERPOLATION
+
     TIME_START_NUM = time_start
     PREVIOUS_TIME = time_start - datetime.timedelta(hours=1)
     NEXT_TIME = time_start + datetime.timedelta(hours=1)

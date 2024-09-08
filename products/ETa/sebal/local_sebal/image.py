@@ -30,6 +30,7 @@ from .tools import (fexp_spec_ind, fexp_lst_export,fexp_radlong_up, LST_DEM_corr
 fexp_radshort_down, fexp_radlong_down, fexp_radbalance, fexp_soil_heat,fexp_sensible_heat_flux, co_dem)
 from .endmembers import fexp_cold_pixel, fexp_hot_pixel
 from .evapotranspiration import fexp_et
+from .download_meteorology import download_era5_re_hourly
 
 #IMAGE FUNCTION
 class Image_local():
@@ -38,17 +39,19 @@ class Image_local():
     #ALLEN ET AL. (2013)
     def __init__(self,
                  image_dr,
+                 local_data_dr,
+                 results_dr,
                  NDVI_cold=5,
                  Ts_cold=20,
                  NDVI_hot=10,
                  Ts_hot=20):
                 #GET INFORMATIONS FROM IMAGE
         self.image_dr = image_dr
-        self.data_dr = r"local data"
+        self.local_data_dr = local_data_dr
         self.ls_data_dr = os.path.split(image_dr)[0]
         self.cal_bands_dr = os.path.join(self.image_dr, "calculated_bands")
         os.makedirs(self.cal_bands_dr, exist_ok= True)
-        self.results_dr = os.path.join(self.data_dr, "results")
+        self.results_dr = results_dr
         meta_names = ['LANDSAT_PRODUCT_ID', 'SPACECRAFT_ID', 'SUN_ELEVATION', 'CLOUD_COVER', 'SCENE_CENTER_TIME', 'DATE_ACQUIRED']
         self.meta = {}
         for file in os.listdir(self.image_dr):
@@ -121,13 +124,8 @@ class Image_local():
         else:
             print('version error')
 
-        # with open('self_image.pkl', 'rb') as f:
-        #     self.image = pickle.load(f)
-
-        # with open('self_col_meteorology.pkl', 'rb') as f:
-        #     col_meteorology = pickle.load(f)
-
         # METEOROLOGY PARAMETERS
+        download_era5_re_hourly(self.image['UB'], self.time_start)
         col_meteorology= get_meteorology(self.image, self.time_start, self.ls_data_dr, self.cal_bands_dr, self.ls_meta)
 
         #AIR TEMPERATURE [C]
@@ -143,7 +141,7 @@ class Image_local():
         self.Rn24hobs = col_meteorology['RN24H_G']
 
         #SRTM DATA ELEVATION
-        SRTM_ELEVATION = os.path.join(self.data_dr, 'strm_30m.tif')
+        SRTM_ELEVATION = os.path.join(self.local_data_dr, 'strm_30m.tif')
         self.z_alt = co_dem(self.ls_meta.copy(), self.res, SRTM_ELEVATION, self.ls_data_dr)
 
         # SPECTRAL IMAGES (NDVI, EVI, SAVI, LAI, T_LST, e_0, e_NB, long, lat)
@@ -181,11 +179,5 @@ class Image_local():
 
         #DAILY EVAPOTRANSPIRATION (ET_24H) [MM DAY-1]
         self.image=fexp_et(self.image, self.Rn24hobs, self.cal_bands_dr, self.ls_meta, self.results_dr, self.date_string)
-        
-        with open('self_col_meteorology.pkl', 'wb') as handle:
-            pickle.dump(col_meteorology, handle)
 
-        with open('self_image.pkl', 'wb') as handle:
-            pickle.dump(self.image, handle)
-
-        # shutil.rmtree(self.cal_bands_dr)
+        shutil.rmtree(self.cal_bands_dr)
