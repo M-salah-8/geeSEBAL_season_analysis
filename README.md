@@ -58,5 +58,9 @@ FAO’s portal to monitor Water Productivity through Open access of Remotely (Wa
 └─────────────────────┘
 ```
 
+## [SEN-ET](docs/set-et.md)
+* New.
+* Not documented yet.
+
 ### contact:
 Mohammed Salah (mohammedalmak98@gmail.com)  
