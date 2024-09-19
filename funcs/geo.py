@@ -3,7 +3,7 @@ import os
 from rasterio.warp import reproject, Resampling
 import numpy as np
 
-class GeoFunctions:
+class GeoFunctions():
     def __init__(self):
         self.resampling_method = {
             'nearest': Resampling.nearest,
@@ -33,7 +33,6 @@ class GeoFunctions:
             dst.write(array)
 
     def coregister(self, source, target, target_array = None, resampling = 'nearest', dtype = np.float32):
-        # check if source is a dic
         if isinstance(source, dict):
             source_props = source
         elif isinstance(source, str):
@@ -51,26 +50,36 @@ class GeoFunctions:
                 target_array = rasterio.open(target).read()
         else:
             raise TypeError('target must be a str or a dict')
-        
-        array, transform = reproject(target_array,
-            destination= np.zeros(source_props['shape'], dtype=dtype),
-            src_transform= target_props['transform'],
-            dst_transform=source_props['transform'],
-            src_crs=target_props['crs'], 
-            dst_crs=source_props['crs'],
-            src_nodata=target_props['nodata'],
-            dst_nodata=source_props['nodata'],
-            dst_resolution=source_props['res'],
-            resampling=self.resampling_method[resampling],
+        coregistered = source_props['crs'] == target_props['crs'] and\
+        source_props['transform'] == target_props['transform'] and\
+        source_props['shape'] == target_props['shape']
+        if coregistered:
+            return target_array, target_props['meta']
+        else:
+            if len(target_array.shape) == 3:
+                dst_array = np.zeros([target_array.shape[0],*source_props['shape']], dtype=dtype)
+            else:
+                dst_array = np.zeros(source_props['shape'], dtype=dtype)
+            array, transform = reproject(target_array,
+                destination= dst_array,
+                src_transform= target_props['transform'],
+                dst_transform=source_props['transform'],
+                src_crs=target_props['crs'], 
+                dst_crs=source_props['crs'],
+                src_nodata=target_props['nodata'],
+                dst_nodata=source_props['nodata'],
+                dst_resolution=source_props['res'],
+                resampling=self.resampling_method[resampling],
+                )
+            meta = target_props['meta']
+            meta.update(
+                width = array.shape[-1],
+                height = array.shape[-2],
+                transform = transform,
+                crs = source_props['crs'],
+                dtype = dtype,
             )
-        meta = target_props['meta']
-        meta.update(
-            width = array.shape[-1],
-            height = array.shape[-2],
-            transform = transform,
-            dtype = dtype,
-        )
-        return array, meta
+            return array, meta
 
     def stack_images(self, tif_files):
         # get tifs properties from the first file

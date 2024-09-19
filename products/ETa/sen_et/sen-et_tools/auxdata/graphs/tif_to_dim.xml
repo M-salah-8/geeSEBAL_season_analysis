@@ -1,0 +1,56 @@
+<graph id="Graph">
+  <version>1.0</version>
+  <node id="Read">
+    <operator>Read</operator>
+    <sources />
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <useAdvancedOptions>false</useAdvancedOptions>
+      <file>/home/msalah/Desktop/m salah/crop monitoring/sen-et test/L2_LCC_22_co.tif</file>
+      <copyMetadata>true</copyMetadata>
+      <bandNames />
+      <pixelRegion>0,0,1725,991</pixelRegion>
+      <maskNames />
+    </parameters>
+  </node>
+  <node id="BandMaths">
+    <operator>BandMaths</operator>
+    <sources>
+      <sourceProduct refid="Read" />
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <targetBands>
+        <targetBand>
+          <name>CCILandCover-2015</name>
+          <type>float32</type>
+          <expression>band_1</expression>
+          <description />
+          <unit />
+          <noDataValue>0.0</noDataValue>
+        </targetBand>
+      </targetBands>
+      <variables />
+    </parameters>
+  </node>
+  <node id="Write">
+    <operator>Write</operator>
+    <sources>
+      <sourceProduct refid="BandMaths" />
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>/home/msalah/Desktop/m salah/crop monitoring/sen-et test/outputs/!OUTPUT!_CCI_landcover.dim</file>
+      <formatName>BEAM-DIMAP</formatName>
+    </parameters>
+  </node>
+  <applicationData id="Presentation">
+    <Description />
+    <node id="Read">
+            <displayPosition x="36.0" y="141.0" />
+    </node>
+    <node id="BandMaths">
+      <displayPosition x="280.0" y="145.0" />
+    </node>
+    <node id="Write">
+            <displayPosition x="512.0" y="155.0" />
+    </node>
+  </applicationData>
+</graph>

@@ -1,0 +1,1 @@
+{"area": [19, 30, 18, 31], "date": "2023-11-24", "download_path": "/home/msalah/Desktop/m salah/crop monitoring/sen-et test/outputs/ecmwf_ERA5/download.nc", "download_temperature": true, "download_dewpoint": true, "download_pressure": true, "download_wind_speed": true, "download_clear_sky_solar_radiation": true, "download_solar_radiation": true, "overwrite": true}

@@ -1,6 +1,6 @@
 import glob
 import os
-import GIS_function as gis
+import funcs.GIS_function as gis
 
 def process_biomass(AOT, fc, MC, tif_template, resample_template, dekads_dr, WaPOR_dr):
   driver, NDV, xsize, ysize, GeoT, Projection = gis.GetGeoInfo(tif_template)

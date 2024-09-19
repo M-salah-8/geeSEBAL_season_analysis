@@ -1,11 +1,9 @@
-import os, glob
+import os
 import subprocess
 import xml.etree.ElementTree as ET
 
-def s2_biophysical_processor(gpt, s2_dr, output_dr, gdf):
-	os.makedirs(os.path.join(s2_dr,'xmls'),exist_ok=True)
+def s2_biophysical_processor(gpt, images_drs, output_dr, gdf):
 	xml_file = os.path.join("products", "growth", "s2_bp", "BP_s2A_10m.xml")
-	images_drs = sorted(glob.glob(os.path.join(s2_dr,"images",'*','*.zip')))
 	gdf = gdf.to_crs('epsg:4326')
 	wkt_data = gdf.boundary.to_wkt().iloc[0]
 	tree = ET.parse(xml_file)
@@ -19,8 +17,8 @@ def s2_biophysical_processor(gpt, s2_dr, output_dr, gdf):
 	for image_dr in images_drs:
 		date = os.path.basename(image_dr).split('_')[-1].split('.')[0][0:8]
 		date = f"{date[0:4]}_{date[4:6]}_{date[6:8]}"
-		os.makedirs(os.path.join(output_dr, "images", date),exist_ok=True)
-		tif_output_dr = os.path.join(output_dr, "images", date, f"{date}.dim")
+		os.makedirs(os.path.join(output_dr, "lai", date),exist_ok=True)
+		tif_output_dr = os.path.join(output_dr, "lai", date, f"{date}.dim")
 		input_file.text = image_dr
 		output_file.text = tif_output_dr
 		os.makedirs(os.path.join(output_dr, "graphs"), exist_ok=True)

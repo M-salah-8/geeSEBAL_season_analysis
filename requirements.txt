@@ -3,7 +3,7 @@
 
 cdsapi==0.7.0
 earthengine-api==0.1.416
-GDAL==3.8.4
+GDAL==3.6.4
 geopandas==1.0.1
 matplotlib==3.9.2
 numpy==1.26.4
