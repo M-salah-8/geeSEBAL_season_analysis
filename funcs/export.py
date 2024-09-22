@@ -3,6 +3,7 @@ import requests
 import os
 import glob
 import rasterio
+import numpy as np
 import pandas as pd
 import datetime
 import rasterio.mask
